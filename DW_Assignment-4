@@ -1,0 +1,581 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "code",
+      "source": [
+        "!pip install numpy\n",
+        "!pip install pandas\n",
+        "!pip install scikit-learn\n",
+        "!pip install scipy\n",
+        "!pip install aif360\n",
+        "!pip install 'aif360[Reductions]'\n",
+        "!pip install 'aif360[inFairness]'"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "collapsed": true,
+        "id": "w0e_nEl_n163",
+        "outputId": "c3efef0f-ab62-4538-bbe2-7dbc02f45cd6"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Requirement already satisfied: numpy in /usr/local/lib/python3.13/dist-packages (2.4.6)\n",
+            "Requirement already satisfied: pandas in /usr/local/lib/python3.13/dist-packages (2.2.3)\n",
+            "Requirement already satisfied: numpy>=1.26.0 in /usr/local/lib/python3.13/dist-packages (from pandas) (2.4.6)\n",
+            "Requirement already satisfied: python-dateutil>=2.8.2 in /usr/local/lib/python3.13/dist-packages (from pandas) (2.9.0.post0)\n",
+            "Requirement already satisfied: pytz>=2020.1 in /usr/local/lib/python3.13/dist-packages (from pandas) (2025.2)\n",
+            "Requirement already satisfied: tzdata>=2022.7 in /usr/local/lib/python3.13/dist-packages (from pandas) (2026.6)\n",
+            "Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.13/dist-packages (from python-dateutil>=2.8.2->pandas) (1.17.0)\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Import libraries"
+      ],
+      "metadata": {
+        "id": "CzL9kv_iu1UP"
+      }
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "RrzXN3jdAJL0"
+      },
+      "outputs": [],
+      "source": [
+        "import warnings\n",
+        "warnings.filterwarnings(\"ignore\")\n",
+        "\n",
+        "import os\n",
+        "import urllib.request\n",
+        "\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from sklearn.preprocessing import MinMaxScaler\n",
+        "from sklearn.linear_model import LogisticRegression\n",
+        "from sklearn.metrics import accuracy_score, f1_score, balanced_accuracy_score\n",
+        "\n",
+        "from aif360.algorithms.preprocessing import LFR\n",
+        "from aif360.metrics import BinaryLabelDatasetMetric\n",
+        "from aif360.algorithms.preprocessing.optim_preproc_helpers.data_preproc_functions import (\n",
+        "    load_preproc_data_adult,\n",
+        "    load_preproc_data_german,\n",
+        "    load_preproc_data_compas,\n",
+        ")"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Load datasets"
+      ],
+      "metadata": {
+        "id": "AERM4E0VxSyR"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def download_aif360_datasets():\n",
+        "    # Define the directory structures and URLs\n",
+        "    base_dir = \"/usr/local/lib/python3.13/dist-packages/aif360/data/raw\"\n",
+        "\n",
+        "    datasets_info = {\n",
+        "        \"adult\": [\n",
+        "            (\"https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data\", \"adult.data\"),\n",
+        "            (\"https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test\", \"adult.test\"),\n",
+        "            (\"https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.names\", \"adult.names\")\n",
+        "        ],\n",
+        "        \"german\": [\n",
+        "            (\"https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data\", \"german.data\"),\n",
+        "            (\"https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.doc\", \"german.doc\")\n",
+        "        ],\n",
+        "        \"compas\": [\n",
+        "            (\"https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv\", \"compas-scores-two-years.csv\")\n",
+        "        ]\n",
+        "    }\n",
+        "\n",
+        "    for folder, files in datasets_info.items():\n",
+        "        target_folder = os.path.join(base_dir, folder)\n",
+        "        os.makedirs(target_folder, exist_ok=True)\n",
+        "        for url, filename in files:\n",
+        "            target_path = os.path.join(target_folder, filename)\n",
+        "            if not os.path.exists(target_path):\n",
+        "                print(f\"Downloading {filename} to {target_folder}...\")\n",
+        "                try:\n",
+        "                    urllib.request.urlretrieve(url, target_path)\n",
+        "                except Exception as e:\n",
+        "                    print(f\"Failed to download {filename}: {e}\")\n",
+        "            else:\n",
+        "                print(f\"{filename} already exists.\")"
+      ],
+      "metadata": {
+        "id": "jMcBneJ8w7sd"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Configure datasets and protected attributes\n"
+      ],
+      "metadata": {
+        "id": "DYgtUVbEu9F5"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# AIF360's helper functions define the protected group as value 1 and\n",
+        "# unprotected group as value 0 for these selected attributes.\n",
+        "DATASETS = {\n",
+        "    \"Adult\": {\n",
+        "        \"loader\": lambda: load_preproc_data_adult(protected_attributes=[\"sex\"]),\n",
+        "        \"protected_attribute\": \"sex\",\n",
+        "        \"unprivileged_groups\": [{\"sex\": 0.0}],  # Female\n",
+        "        \"privileged_groups\": [{\"sex\": 1.0}],    # Male\n",
+        "    },\n",
+        "    \"German\": {\n",
+        "        \"loader\": lambda: load_preproc_data_german(protected_attributes=[\"sex\"]),\n",
+        "        \"protected_attribute\": \"sex\",\n",
+        "        \"unprivileged_groups\": [{\"sex\": 0.0}],  # Female\n",
+        "        \"privileged_groups\": [{\"sex\": 1.0}],    # Male\n",
+        "    },\n",
+        "    \"COMPAS\": {\n",
+        "        \"loader\": lambda: load_preproc_data_compas(protected_attributes=[\"race\"]),\n",
+        "        \"protected_attribute\": \"race\",\n",
+        "        \"unprivileged_groups\": [{\"race\": 0.0}],  # Not Caucasian\n",
+        "        \"privileged_groups\": [{\"race\": 1.0}],    # Caucasian\n",
+        "    },\n",
+        "}"
+      ],
+      "metadata": {
+        "id": "DuCSljoPBwFY"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Define fairness evaluation function\n"
+      ],
+      "metadata": {
+        "id": "geXQXNtzu_fj"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def fairness_metrics(dataset, y_pred=None, scores=None,\n",
+        "                    unprivileged_groups=None, privileged_groups=None):\n",
+        "    \"\"\"Compute DP difference, disparate impact and AIF360 consistency.\"\"\"\n",
+        "    ds = dataset.copy(deepcopy=True)\n",
+        "\n",
+        "    # If predictions are provided, replace the original labels\n",
+        "    # with the model's predicted labels.\n",
+        "    if y_pred is not None:\n",
+        "        y_pred = np.asarray(y_pred).astype(float).reshape(-1, 1)\n",
+        "        ds.labels = y_pred\n",
+        "\n",
+        "        # If probability scores are not provided, use binary predictions.\n",
+        "        if scores is None:\n",
+        "            ds.scores = y_pred.copy()\n",
+        "        else:\n",
+        "            ds.scores = np.asarray(scores).astype(float).reshape(-1, 1)\n",
+        "\n",
+        "    # This object compares the outcomes of the two protected groups.\n",
+        "    metric = BinaryLabelDatasetMetric(\n",
+        "        ds,\n",
+        "        unprivileged_groups=unprivileged_groups,\n",
+        "        privileged_groups=privileged_groups,\n",
+        "    )\n",
+        "\n",
+        "    return {\n",
+        "        \"DP_Diff\": float(metric.statistical_parity_difference()),\n",
+        "        \"DIR\": float(metric.disparate_impact()),\n",
+        "        \"Consistency\": float(np.mean(metric.consistency(n_neighbors=N_NEIGHBORS))),\n",
+        "    }"
+      ],
+      "metadata": {
+        "id": "Yn0sbdgxByMz"
+      },
+      "execution_count": 49,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Define predictive performance evaluation function\n"
+      ],
+      "metadata": {
+        "id": "4YrDQJoTvCrU"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def predictive_metrics(y_true, y_pred):\n",
+        "    return {\n",
+        "        \"Accuracy\": float(accuracy_score(y_true, y_pred)),\n",
+        "        \"F1\": float(f1_score(y_true, y_pred, zero_division=0)),\n",
+        "        \"Balanced_Accuracy\": float(balanced_accuracy_score(y_true, y_pred)),\n",
+        "    }"
+      ],
+      "metadata": {
+        "id": "dLlIu4f2BzmY"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Run the experiment on one dataset\n"
+      ],
+      "metadata": {
+        "id": "2qcLcHJIvE8Q"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "RANDOM_STATE = 42\n",
+        "TEST_SIZE = 0.30\n",
+        "N_NEIGHBORS = 5"
+      ],
+      "metadata": {
+        "id": "9HwfqNpQAipP"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def run_one_dataset(dataset_name, config):\n",
+        "\n",
+        "    print(f\"\\n===== {dataset_name} =====\")\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 1. Load dataset\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    dataset = config[\"loader\"]()\n",
+        "    y = dataset.labels.ravel().astype(int)\n",
+        "    indices = np.arange(len(y))\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 2. Evaluate original fairness\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # This serves as a reference before applying bias mitigation.\n",
+        "    original = fairness_metrics(\n",
+        "        dataset,\n",
+        "        unprivileged_groups=config[\"unprivileged_groups\"],\n",
+        "        privileged_groups=config[\"privileged_groups\"],\n",
+        "    )\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 3. Split and scale data\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Use stratified sampling to preserve the class distribution.\n",
+        "    train_idx, test_idx = train_test_split(\n",
+        "        indices,\n",
+        "        test_size=TEST_SIZE,\n",
+        "        random_state=RANDOM_STATE,\n",
+        "        stratify=y,\n",
+        "    )\n",
+        "\n",
+        "    train_ds = dataset.subset(train_idx)\n",
+        "    test_ds = dataset.subset(test_idx)\n",
+        "\n",
+        "    # Extract features and labels from both subsets.\n",
+        "    X_train = np.asarray(train_ds.features, dtype=float)\n",
+        "    X_test = np.asarray(test_ds.features, dtype=float)\n",
+        "    y_train = train_ds.labels.ravel().astype(int)\n",
+        "    y_test = test_ds.labels.ravel().astype(int)\n",
+        "\n",
+        "    # Scale features using training data only to prevent data leakage.\n",
+        "    scaler = MinMaxScaler()\n",
+        "    X_train_scaled = scaler.fit_transform(X_train)\n",
+        "    X_test_scaled = scaler.transform(X_test)\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 4. Train baseline model\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Train Logistic Regression without any bias-mitigation technique.\n",
+        "    baseline = LogisticRegression(\n",
+        "        max_iter=2000,\n",
+        "        random_state=RANDOM_STATE\n",
+        "    )\n",
+        "    baseline.fit(X_train_scaled, y_train)\n",
+        "\n",
+        "    # Generate predictions and favorable-outcome probabilities.\n",
+        "    baseline_pred = baseline.predict(X_test_scaled)\n",
+        "    baseline_score = baseline.predict_proba(X_test_scaled)[:, 1]\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 5. Evaluate baseline model\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Evaluate fairness across protected groups using test predictions.\n",
+        "    baseline_fairness = fairness_metrics(\n",
+        "        test_ds,\n",
+        "        y_pred=baseline_pred,\n",
+        "        scores=baseline_score,\n",
+        "        unprivileged_groups=config[\"unprivileged_groups\"],\n",
+        "        privileged_groups=config[\"privileged_groups\"],\n",
+        "    )\n",
+        "\n",
+        "    # Evaluate predictive performance against actual test labels.\n",
+        "    baseline_performance = predictive_metrics(\n",
+        "        y_test, baseline_pred\n",
+        "    )\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 6. Apply LFR transformation\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Prepare AIF360 datasets with scaled features and original metadata.\n",
+        "    lfr_train_input = train_ds.copy(deepcopy=True)\n",
+        "    lfr_train_input.features = X_train_scaled\n",
+        "\n",
+        "    lfr_test_input = test_ds.copy(deepcopy=True)\n",
+        "    lfr_test_input.features = X_test_scaled\n",
+        "\n",
+        "    # Initialize LFR with reconstruction, prediction and fairness weights.\n",
+        "    lfr = LFR(\n",
+        "        unprivileged_groups=config[\"unprivileged_groups\"],\n",
+        "        privileged_groups=config[\"privileged_groups\"],\n",
+        "        k=5,\n",
+        "        Ax=0.1,\n",
+        "        Ay=1.0,\n",
+        "        Az=50.0,\n",
+        "        verbose=0,\n",
+        "        seed=RANDOM_STATE,\n",
+        "    )\n",
+        "\n",
+        "    # Fit LFR on training data only to avoid data leakage.\n",
+        "    lfr.fit(lfr_train_input, maxiter=500, maxfun=500)\n",
+        "\n",
+        "    # Transform training and testing data using the learned representation.\n",
+        "    train_transformed = lfr.transform(\n",
+        "        lfr_train_input, threshold=0.5\n",
+        "    )\n",
+        "    test_transformed = lfr.transform(\n",
+        "        lfr_test_input, threshold=0.5\n",
+        "    )\n",
+        "\n",
+        "    # Extract transformed features and training labels.\n",
+        "    X_train_lfr = train_transformed.features\n",
+        "    X_test_lfr = test_transformed.features\n",
+        "    y_train_lfr = train_transformed.labels.ravel().astype(int)\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 7. Train and evaluate LFR model\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Fallback mechanism if LFR labels collapsed to a single class\n",
+        "    if len(np.unique(y_train_lfr)) < 2:\n",
+        "        print(f\"[Warning] LFR labels collapsed to a single class in {dataset_name}. Using original train labels instead.\")\n",
+        "        y_train_to_use = y_train\n",
+        "    else:\n",
+        "        y_train_to_use = y_train_lfr\n",
+        "\n",
+        "    # Train the same classifier using LFR-transformed training data.\n",
+        "    mitigated_model = LogisticRegression(\n",
+        "        max_iter=2000,\n",
+        "        random_state=RANDOM_STATE\n",
+        "    )\n",
+        "    mitigated_model.fit(X_train_lfr, y_train_to_use)\n",
+        "\n",
+        "    # Generate predictions from transformed test features.\n",
+        "    mitigated_pred = mitigated_model.predict(X_test_lfr)\n",
+        "    mitigated_score = mitigated_model.predict_proba(X_test_lfr)[:, 1]\n",
+        "\n",
+        "    # Evaluate fairness using the transformed test representation.\n",
+        "    mitigated_fairness = fairness_metrics(\n",
+        "        test_transformed,\n",
+        "        y_pred=mitigated_pred,\n",
+        "        scores=mitigated_score,\n",
+        "        unprivileged_groups=config[\"unprivileged_groups\"],\n",
+        "        privileged_groups=config[\"privileged_groups\"],\n",
+        "    )\n",
+        "\n",
+        "    # Compare predictions with the original ground-truth test labels.\n",
+        "    mitigated_performance = predictive_metrics(\n",
+        "        y_test, mitigated_pred\n",
+        "    )\n",
+        "\n",
+        "    # --------------------------------------------------------\n",
+        "    # 8. Collect and display results\n",
+        "    # --------------------------------------------------------\n",
+        "\n",
+        "    # Combine fairness and predictive metrics from all stages.\n",
+        "    rows = [\n",
+        "        {\n",
+        "            \"Dataset\": dataset_name,\n",
+        "            \"Stage\": \"Original labels (full data)\",\n",
+        "            **original\n",
+        "        },\n",
+        "        {\n",
+        "            \"Dataset\": dataset_name,\n",
+        "            \"Stage\": \"Baseline predictions (test)\",\n",
+        "            **baseline_fairness,\n",
+        "            **baseline_performance\n",
+        "        },\n",
+        "        {\n",
+        "            \"Dataset\": dataset_name,\n",
+        "            \"Stage\": \"LFR predictions (test)\",\n",
+        "            **mitigated_fairness,\n",
+        "            **mitigated_performance\n",
+        "        }\n",
+        "    ]\n",
+        "\n",
+        "    result = pd.DataFrame(rows)\n",
+        "    print(result.to_string(index=False))\n",
+        "    return result"
+      ],
+      "metadata": {
+        "id": "i_R9v4XCB-rP"
+      },
+      "execution_count": 47,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Main function: Run experiments on all datasets\n"
+      ],
+      "metadata": {
+        "id": "6aBVcEIsvKo1"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def main():\n",
+        "    all_results = []\n",
+        "\n",
+        "    # Iterate over Adult, German Credit and COMPAS.\n",
+        "    for name, config in DATASETS.items():\n",
+        "        try:\n",
+        "            result = run_one_dataset(name, config)\n",
+        "            all_results.append(result)\n",
+        "        except Exception as exc:\n",
+        "            print(f\"\\nERROR while processing {name}: {exc}\")\n",
+        "            print(\n",
+        "                \"Check that the AIF360 raw dataset files are installed in \"\n",
+        "                \"the expected aif360/data/raw/ folders and that your AIF360 \"\n",
+        "                \"version exposes the preprocessing helper loaders.\"\n",
+        "            )\n",
+        "            raise\n",
+        "\n",
+        "    final = pd.concat(all_results, ignore_index=True)\n",
+        "    final.to_csv(\"lfr_fairness_results.csv\", index=False)\n",
+        "    print(\"\\nSaved: lfr_fairness_results.csv\")"
+      ],
+      "metadata": {
+        "id": "zExzDGyhCCvJ"
+      },
+      "execution_count": 45,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Execute the experiment\n"
+      ],
+      "metadata": {
+        "id": "hoads48svyaI"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "if __name__ == \"__main__\":\n",
+        "    try:\n",
+        "        download_aif360_datasets()\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error setting up datasets: {e}\")\n",
+        "\n",
+        "    # Run the main experiment\n",
+        "    main()"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "rauRnK4cCP_j",
+        "outputId": "9e4c0ecf-2c6a-45df-f684-9fff1b135157"
+      },
+      "execution_count": 50,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "adult.data already exists.\n",
+            "adult.test already exists.\n",
+            "adult.names already exists.\n",
+            "german.data already exists.\n",
+            "german.doc already exists.\n",
+            "compas-scores-two-years.csv already exists.\n",
+            "\n",
+            "===== Adult =====\n",
+            "Dataset                       Stage   DP_Diff      DIR  Consistency  Accuracy       F1  Balanced_Accuracy\n",
+            "  Adult Original labels (full data) -0.194516 0.359655     0.719319       NaN      NaN                NaN\n",
+            "  Adult Baseline predictions (test) -0.207636 0.000000     0.999918  0.803180 0.479422           0.657722\n",
+            "  Adult      LFR predictions (test)  0.031090 1.181937     0.999864  0.646011 0.158091           0.472206\n",
+            "\n",
+            "===== German =====\n",
+            "[Warning] LFR labels collapsed to a single class in German. Using original train labels instead.\n",
+            "Dataset                       Stage   DP_Diff      DIR  Consistency  Accuracy       F1  Balanced_Accuracy\n",
+            " German Original labels (full data) -0.074801 0.896567       0.6614       NaN      NaN                NaN\n",
+            " German Baseline predictions (test) -0.187671 0.806495       0.9940  0.733333 0.834025           0.584127\n",
+            " German      LFR predictions (test)  0.000000 1.000000       1.0000  0.700000 0.823529           0.500000\n",
+            "\n",
+            "===== COMPAS =====\n",
+            "[Warning] LFR labels collapsed to a single class in COMPAS. Using original train labels instead.\n",
+            "Dataset                       Stage   DP_Diff      DIR  Consistency  Accuracy       F1  Balanced_Accuracy\n",
+            " COMPAS Original labels (full data) -0.132279 0.782839     0.595074       NaN      NaN                NaN\n",
+            " COMPAS Baseline predictions (test) -0.283684 0.620365     0.998232  0.661616 0.620934           0.657563\n",
+            " COMPAS      LFR predictions (test) -0.103692 0.816523     0.998232  0.612374 0.599217           0.612583\n",
+            "\n",
+            "Saved: lfr_fairness_results.csv\n"
+          ]
+        }
+      ]
+    }
+  ]
+}
